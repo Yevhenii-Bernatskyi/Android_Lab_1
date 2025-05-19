@@ -14,10 +14,13 @@ import java.io.IOException
 
 // Клас для представлення стану UI погоди
 sealed class WeatherUiState {
-    object Loading : WeatherUiState() // Стан завантаження
-    data class Success(val forecast: List<ForecastItemEntity>) : WeatherUiState() // Успішне завантаження даних
-    data class Error(val message: String) : WeatherUiState() // Помилка
-    object Empty : WeatherUiState() // Якщо дані не завантажені і немає помилки (наприклад, кеш порожній, мережі немає)
+    object Loading : WeatherUiState()
+    data class Success(
+        val currentWeatherData: ForecastItemEntity?, // Може бути null, якщо список порожній
+        val forecastList: List<ForecastItemEntity>
+    ) : WeatherUiState()
+    data class Error(val message: String) : WeatherUiState()
+    object Empty : WeatherUiState() // Залишаємо для випадків, коли взагалі немає даних
 }
 
 class WeatherViewModel(application: Application) : AndroidViewModel(application) {
@@ -61,26 +64,34 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
             try {
                 repository.getForecast(cityName, forceRefresh)
                     .catch { exception ->
-                        // Обробка помилок, що прийшли з репозиторію
                         _weatherUiState.value = WeatherUiState.Error(
                             exception.message ?: "Невідома помилка завантаження"
                         )
                     }
-                    .collect { forecastList ->
-                        if (forecastList.isNotEmpty()) {
-                            _weatherUiState.value = WeatherUiState.Success(forecastList)
+                    .collect { forecastListFromRepo ->
+                        if (forecastListFromRepo.isNotEmpty()) {
+                            // Варіант: поточна погода - перший елемент, список прогнозу - всі елементи,
+                            // включаючи перший (тобто він буде і як "поточний" і в списку)
+//                            _weatherUiState.value = WeatherUiState.Success(
+//                                currentWeatherData = forecastListFromRepo.first(),
+//                                forecastList = forecastListFromRepo
+//                            )
+                            // АБО Варіант: поточна погода - перший, список прогнозу - решта
+                            _weatherUiState.value = WeatherUiState.Success(
+                                 currentWeatherData = forecastListFromRepo.first(),
+                                 forecastList = forecastListFromRepo.drop(1)
+                             )
+                            // Оберіть, який варіант вам більше підходить.
+                            // Перший варіант (весь список в forecastList) простіший для початку.
                         } else {
-                            // Якщо список порожній, але не було помилки від репозиторію,
-                            // це може означати, що кеш порожній і мережі не було / не вдалося завантажити.
-                            // Перевіряємо, чи поточний стан вже не є помилкою, щоб не перезаписати її.
                             if (_weatherUiState.value !is WeatherUiState.Error) {
                                 _weatherUiState.value = WeatherUiState.Empty
                             }
                         }
                     }
-            } catch (e: IOException) { // Ловимо IOException, які може кинути репозиторій
+            } catch (e: IOException) {
                 _weatherUiState.value = WeatherUiState.Error(e.message ?: "Помилка вводу/виводу")
-            } catch (e: Exception) { // Загальна обробка інших непередбачених помилок
+            } catch (e: Exception) {
                 _weatherUiState.value = WeatherUiState.Error(e.message ?: "Сталася непередбачена помилка")
             }
         }

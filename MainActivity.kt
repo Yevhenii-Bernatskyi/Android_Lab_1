@@ -3,10 +3,15 @@ package com.example.android_lab_1
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.viewModels // Для делегата by viewModels()
+import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,18 +21,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle // Важливо для безпечного збору Flow
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.android_lab_1.data.local.ForecastItemEntity
-import com.example.android_lab_1.ui.theme.WeatherUiState
-import com.example.android_lab_1.ui.theme.WeatherViewModel
-import com.example.android_lab_1.ui.theme.Android_Lab_1Theme // Переконайся, що ця тема існує
+import com.example.android_lab_1.ui.theme.WeatherUiState // Переконайтесь, що шлях правильний
+import com.example.android_lab_1.ui.theme.WeatherViewModel // Переконайтесь, що шлях правильний
+import com.example.android_lab_1.ui.theme.Android_Lab_1Theme // Переконайтесь, що ця тема існує
 import java.text.SimpleDateFormat
 import java.util.* // Для Date
-import java.util.concurrent.TimeUnit // Для форматування дати (якщо потрібно)
+
 
 class MainActivity : ComponentActivity() {
 
-    // Отримуємо екземпляр WeatherViewModel за допомогою делегата by viewModels()
     private val weatherViewModel: WeatherViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,24 +45,84 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        // Викликаємо оновлення даних при старті Activity.
-        // ViewModel та Repository самі вирішать, чи потрібен новий запит до API.
-        weatherViewModel.refreshWeatherData("Kyiv") // Можеш зробити місто динамічним
+        weatherViewModel.refreshWeatherData("Kyiv")
+    }
+}
+
+@Composable
+fun CurrentWeatherCard(weatherData: ForecastItemEntity) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Зараз в ${weatherData.cityName}",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            val sdf = remember { SimpleDateFormat("HH:mm, EEEE, dd MMMM", Locale("uk", "UA")) }
+            val dateString = remember(weatherData.dateTimeStamp) {
+                sdf.format(Date(weatherData.dateTimeStamp * 1000L))
+            }
+            Text(
+                text = dateString,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = "${weatherData.weatherDescription.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }}",
+                style = MaterialTheme.typography.titleLarge,
+                fontSize = 22.sp
+            )
+            // Можна додати іконку погоди тут
+            // AsyncImage(
+            //    model = "https://openweathermap.org/img/wn/${weatherData.weatherIcon}@4x.png",
+            //    contentDescription = weatherData.weatherDescription,
+            //    modifier = Modifier.size(96.dp)
+            // )
+            Text(
+                text = "${weatherData.temp}°C",
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "Відчувається як: ${weatherData.feelsLike}°C",
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceAround
+            ) {
+                Text("Вологість: ${weatherData.humidity}%")
+                Text("Тиск: ${weatherData.pressure} гПа")
+            }
+            Text(
+                text = "Вітер: ${weatherData.windSpeed} м/с",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class) // Для використання Scaffold та TopAppBar з Material 3
 @Composable
 fun WeatherAppScreen(viewModel: WeatherViewModel) {
-    // Збираємо стан UI та стан мережі з ViewModel, безпечно для життєвого циклу
     val uiState by viewModel.weatherUiState.collectAsStateWithLifecycle()
     val isNetworkAvailable by viewModel.isNetworkAvailable.collectAsStateWithLifecycle()
-
-    // Створюємо стан для Snackbar (повідомлення)
     val snackbarHostState = remember { SnackbarHostState() }
+    var forecastExpanded by remember { mutableStateOf(false) }
 
-    // Показуємо Snackbar, якщо мережа недоступна і ми не в стані завантаження
-    // (щоб не показувати одночасно з індикатором завантаження, якщо запит вже йде)
+
     LaunchedEffect(isNetworkAvailable, uiState) {
         if (!isNetworkAvailable && uiState !is WeatherUiState.Loading) {
             snackbarHostState.showSnackbar(
@@ -69,48 +133,97 @@ fun WeatherAppScreen(viewModel: WeatherViewModel) {
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) }, // Додаємо хост для Snackbar
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Прогноз Погоди в Києві") }, // Можна зробити динамічним
+                title = { Text("Прогноз погоди") }, // Оновлений заголовок
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
         }
-    ) { innerPadding -> // Відступи, що надаються Scaffold для контенту
-        Box(
+    ) { innerPadding ->
+        Column( // Використовуємо Column для основного компонування
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding) // Застосовуємо внутрішні відступи
-                .padding(16.dp) // Додаткові відступи для контенту
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp, vertical = 8.dp) // Загальні відступи
         ) {
             when (val state = uiState) {
                 is WeatherUiState.Loading -> {
-                    // Показуємо індикатор завантаження по центру
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
                 }
                 is WeatherUiState.Success -> {
-                    // Якщо дані успішно завантажені, показуємо список
-                    ForecastLazyColumn(forecastItems = state.forecast)
+                    state.currentWeatherData?.let { currentWeather ->
+                        CurrentWeatherCard(weatherData = currentWeather)
+                    } ?: Box(modifier = Modifier.padding(vertical = 16.dp)) {
+                        Text(
+                            "Дані про поточну погоду недоступні.",
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    // Роздільник або відступ (опціонально)
+                    // Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    // Секція для випадаючого списку прогнозу
+                    Column {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { forecastExpanded = !forecastExpanded }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                "Прогноз на найближчий час",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Icon(
+                                imageVector = if (forecastExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                contentDescription = if (forecastExpanded) "Згорнути" else "Розгорнути"
+                            )
+                        }
+
+                        AnimatedVisibility(visible = forecastExpanded) {
+                            if (state.forecastList.isNotEmpty()) {
+                                // Тут ми помістимо ForecastLazyColumn всередину Box з вагою,
+                                // щоб він правильно скролився, якщо контенту багато,
+                                // а батьківський Column не скролиться.
+                                Box(modifier = Modifier.weight(1f, fill = false)) {
+                                    ForecastLazyColumn(forecastItems = state.forecastList)
+                                }
+                            } else {
+                                Text(
+                                    "Детальний прогноз на найближчий час відсутній.",
+                                    modifier = Modifier.padding(vertical = 8.dp).align(Alignment.CenterHorizontally)
+                                )
+                            }
+                        }
+                    }
                 }
                 is WeatherUiState.Error -> {
-                    // Якщо сталася помилка, показуємо повідомлення про помилку
-                    Text(
-                        text = "Помилка: ${state.message}",
-                        color = MaterialTheme.colorScheme.error,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "Помилка: ${state.message}",
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
                 is WeatherUiState.Empty -> {
-                    // Якщо дані порожні (кеш порожній і не вдалося завантажити)
-                    Text(
-                        text = "Немає даних для відображення. Перевірте підключення до мережі та спробуйте оновити.",
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "Немає даних для відображення. Перевірте підключення до мережі та спробуйте оновити.",
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
         }
@@ -119,19 +232,14 @@ fun WeatherAppScreen(viewModel: WeatherViewModel) {
 
 @Composable
 fun ForecastLazyColumn(forecastItems: List<ForecastItemEntity>) {
-    if (forecastItems.isEmpty()) {
-        // Цей випадок вже обробляється у WeatherAppScreen через WeatherUiState.Empty,
-        // але можна залишити для ясності або якщо цей Composable буде перевикористовуватися.
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Немає доступних даних прогнозу.")
-        }
-        return
-    }
-
+    // Цей Composable тепер буде використовуватися всередині AnimatedVisibility.
+    // Переконайтеся, що він не має власного Modifier.fillMaxSize(),
+    // якщо батьківський елемент вже контролює розмір.
     LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(12.dp) // Відстань між елементами списку
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxHeight() // Дозволяє скролити, якщо вміст більший за доступне місце
     ) {
-        items(forecastItems) { forecastItem -> // `items` - це функція для LazyColumn
+        items(forecastItems) { forecastItem ->
             ForecastItemRow(item = forecastItem)
         }
     }
@@ -139,8 +247,6 @@ fun ForecastLazyColumn(forecastItems: List<ForecastItemEntity>) {
 
 @Composable
 fun ForecastItemRow(item: ForecastItemEntity) {
-    // Форматуємо дату та час
-    // dt_timestamp - це Unix timestamp в секундах, Date() очікує мілісекунди
     val sdf = remember { SimpleDateFormat("EEEE, dd MMMM, HH:mm", Locale("uk", "UA")) }
     val dateString = remember(item.dateTimeStamp) {
         sdf.format(Date(item.dateTimeStamp * 1000L))
@@ -148,7 +254,7 @@ fun ForecastItemRow(item: ForecastItemEntity) {
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), // Трохи менша тінь для елементів списку
         shape = MaterialTheme.shapes.medium
     ) {
         Column(
@@ -164,7 +270,7 @@ fun ForecastItemRow(item: ForecastItemEntity) {
                 color = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = "${item.weatherDescription.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }}", // Перша літера велика
+                text = "${item.weatherDescription.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }}",
                 style = MaterialTheme.typography.bodyLarge,
                 fontSize = 18.sp
             )
@@ -187,7 +293,7 @@ fun ForecastItemRow(item: ForecastItemEntity) {
                 style = MaterialTheme.typography.bodyMedium
             )
             Text(
-                text = "Тиск: ${item.pressure} гПа", // гПа - гектопаскалі
+                text = "Тиск: ${item.pressure} гПа",
                 style = MaterialTheme.typography.bodyMedium
             )
             Text(
@@ -198,16 +304,9 @@ fun ForecastItemRow(item: ForecastItemEntity) {
                 Text(
                     text = "Опади (3г): ${item.rainVolume3h} мм",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.Blue // Просто для виділення
+                    color = Color(0xFF4A90E2) // Більш приємний синій
                 )
             }
-            // Тут можна додати іконку погоди, якщо завантажити їх або використати бібліотеку іконок
-            // Наприклад, AsyncImage з Coil: // implementation("io.coil-kt:coil-compose:2.6.0")
-            // AsyncImage(
-            //    model = "https://openweathermap.org/img/wn/${item.weatherIcon}@2x.png",
-            //    contentDescription = item.weatherDescription,
-            //    modifier = Modifier.size(48.dp)
-            // )
         }
     }
 }

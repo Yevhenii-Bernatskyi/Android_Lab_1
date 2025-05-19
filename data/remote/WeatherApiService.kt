@@ -14,7 +14,7 @@ class WeatherApiService(
     // ЗАМІНИ "YOUR_OPENWEATHERMAP_API_KEY" НА СВІЙ СПРАВЖНІЙ КЛЮЧ!
     // Краще винести ключ в buildConfigField або local.properties для безпеки,
     // але для лабораторної тимчасово можна так.
-    private val apiKey = "YOUR_OPENWEATHERMAP_API_KEY"
+    private val apiKey = "4e6b3e483f3fd5710bd03515280440c2"
 
     companion object {
         // Базовий URL для API прогнозу
